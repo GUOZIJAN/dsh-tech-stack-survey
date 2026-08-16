@@ -13,14 +13,15 @@
 //   (the wire protocol strips unknown fields, so the marker lives in the id
 //   prefix); this composer claims those (and only those — priority -1, and
 //   the selector verifies the prefix, so ordinary ask_user_question flows
-//   keep using the built-in composer) and renders:
-//     - all questions in one card;
-//     - exactly 3 options per question: stack name + the scenario it fits
-//       (first paragraph of `option.description`);
+//   keep using the built-in composer) and renders ONE QUESTION AT A TIME:
+//     - the current question with exactly 3 options: stack name + the
+//       scenario it fits (first paragraph of `option.description`);
 //     - a hover tooltip on every option showing the full description
 //       (`scenario\n\ndetails`, both carried inside the allowed
 //       `option.description` field);
-//     - one submit button that answers every question at once.
+//     - selecting an option auto-advances to the next question (with a
+//       "previous" button to go back and change a choice);
+//     - after the LAST question is answered, "submit" delivers every answer.
 //   Submitting calls `wait.respond(...)` exactly like the built-in composer,
 //   which resolves the Host-side `ctx.userQuestions.ask()` promise and lets the
 //   model continue with the chosen stack in the same turn.
@@ -37,20 +38,28 @@ const dicts = {
     title: '项目技术选型',
     subtitle: '开始设计前，先确认几个关键技术选择',
     hint: '将鼠标悬停在选项上，可查看该技术栈的详细介绍',
+    qProgress: '问题',
+    prev: '上一题',
+    next: '下一题',
     answered: '已选择',
     cancel: '放弃问卷',
     submit: '提交并开始设计',
     submitting: '提交中…',
+    errorUnanswered: '请先选择一个选项',
     errorRejected: '提交被拒绝，请重试',
   },
   en: {
     title: 'Tech Stack Survey',
     subtitle: 'A few choices before we start designing',
     hint: 'Hover over an option to see details about that stack',
+    qProgress: 'Question',
+    prev: 'Previous',
+    next: 'Next',
     answered: 'Answered',
     cancel: 'Dismiss',
     submit: 'Submit & start designing',
     submitting: 'Submitting…',
+    errorUnanswered: 'Please choose an option first',
     errorRejected: 'Submission rejected, please retry',
   },
 };
@@ -87,18 +96,29 @@ function SurveyComposer(props) {
   const questions = wait && wait.payload && Array.isArray(wait.payload.questions)
     ? wait.payload.questions
     : [];
+  const [index, setIndex] = React.useState(0);
   const [selected, setSelected] = React.useState({});
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState(null);
 
   if (questions.length === 0) return null;
 
-  const answeredCount = questions.filter((q) => selected[q.id]).length;
-  const allAnswered = answeredCount === questions.length;
+  const question = questions[Math.min(index, questions.length - 1)];
+  const isLast = index === questions.length - 1;
+  const answered = Boolean(selected[question.id]);
+  const allAnswered = questions.every((q) => Boolean(selected[q.id]));
 
   const choose = (qid, label) => {
     setSelected((prev) => ({ ...prev, [qid]: label }));
     setError(null);
+    if (!isLast) setIndex((current) => current + 1);
+  };
+
+  const goPrev = () => {
+    if (index > 0) {
+      setIndex((current) => current - 1);
+      setError(null);
+    }
   };
 
   const settle = (request) => {
@@ -126,6 +146,16 @@ function SurveyComposer(props) {
         setError(receipt ? String(receipt.reason) : t('errorRejected'));
       }
     }));
+  };
+
+  const advance = () => {
+    if (!answered) {
+      setError(t('errorUnanswered'));
+      return;
+    }
+    setError(null);
+    if (isLast) submit();
+    else setIndex((current) => current + 1);
   };
 
   const cancel = () => {
@@ -173,27 +203,27 @@ function SurveyComposer(props) {
       React.createElement(
         'div',
         { className: 'dss-body', 'data-dss-scroll': true },
-        questions.map((q, qi) => React.createElement(
+        React.createElement(
           'div',
-          { className: 'dss-question', key: q.id },
+          { className: 'dss-question', key: question.id },
           React.createElement(
             'div',
             { className: 'dss-qhead' },
-            React.createElement('span', { className: 'dss-qnum', 'aria-hidden': 'true' }, String(qi + 1)),
+            React.createElement('span', { className: 'dss-qnum', 'aria-hidden': 'true' }, String(index + 1)),
             React.createElement(
               'div',
               { className: 'dss-qtext' },
-              React.createElement('div', { className: 'dss-qtitle' }, q.question),
-              qi === 0 && q.detail
-                ? React.createElement('div', { className: 'dss-qdetail' }, q.detail)
+              React.createElement('div', { className: 'dss-qtitle' }, question.question),
+              index === 0 && question.detail
+                ? React.createElement('div', { className: 'dss-qdetail' }, question.detail)
                 : null,
             ),
           ),
           React.createElement(
             'div',
-            { className: 'dss-options', role: 'radiogroup', 'aria-label': q.question },
-            (q.options || []).map((opt, oi) => {
-              const isSelected = selected[q.id] === opt.label;
+            { className: 'dss-options', role: 'radiogroup', 'aria-label': question.question },
+            (question.options || []).map((opt, oi) => {
+              const isSelected = selected[question.id] === opt.label;
               const full = String((opt && opt.description) || '');
               const scenario = scenarioOf(opt);
               return React.createElement(
@@ -206,7 +236,7 @@ function SurveyComposer(props) {
                   'aria-checked': isSelected,
                   'aria-label': opt.label,
                   disabled: busy,
-                  onClick: () => choose(q.id, opt.label),
+                  onClick: () => choose(question.id, opt.label),
                 },
                 React.createElement(
                   'span',
@@ -227,7 +257,7 @@ function SurveyComposer(props) {
               );
             }),
           ),
-        )),
+        ),
       ),
       React.createElement(
         'footer',
@@ -235,9 +265,9 @@ function SurveyComposer(props) {
         React.createElement(
           'div',
           { className: 'dss-progress' },
-          t('answered'),
+          t('qProgress'),
           ' ',
-          String(answeredCount),
+          String(index + 1),
           ' / ',
           String(questions.length),
         ),
@@ -245,20 +275,22 @@ function SurveyComposer(props) {
         React.createElement(
           'div',
           { className: 'dss-actions' },
-          React.createElement(
-            'button',
-            { type: 'button', className: 'dss-btn dss-btn-ghost', disabled: busy, onClick: cancel },
-            t('cancel'),
-          ),
+          index > 0
+            ? React.createElement(
+                'button',
+                { type: 'button', className: 'dss-btn dss-btn-ghost', disabled: busy, onClick: goPrev },
+                t('prev'),
+              )
+            : null,
           React.createElement(
             'button',
             {
               type: 'button',
               className: 'dss-btn dss-btn-primary',
-              disabled: busy || !allAnswered,
-              onClick: submit,
+              disabled: busy || !answered,
+              onClick: advance,
             },
-            busy ? t('submitting') : t('submit'),
+            busy ? t('submitting') : (isLast ? t('submit') : t('next')),
           ),
         ),
       ),
