@@ -101,6 +101,10 @@ check('tool name is design_stack_survey', registeredTool && registeredTool.name 
 check('tool has a description', registeredTool && typeof registeredTool.description === 'string' && registeredTool.description.length > 40);
 check('tool declares project_description required', registeredTool && registeredTool.parameters && registeredTool.parameters.project_description && registeredTool.parameters.project_description.required === true);
 check('tool declares project_type enum', registeredTool && Array.isArray(registeredTool.parameters.project_type.enum) && registeredTool.parameters.project_type.enum.length >= 5);
+check(
+  'no optional parameter declares required:false (DSL rule)',
+  !Object.values(registeredTool.parameters).some((p) => Object.prototype.hasOwnProperty.call(p, 'required') && p.required !== true),
+);
 check('tool declares output schema', registeredTool && registeredTool.output && registeredTool.output.schema && registeredTool.output.schema.type === 'object');
 check('tool has execute()', registeredTool && typeof registeredTool.execute === 'function');
 check('tool has output.render()', registeredTool && typeof registeredTool.output.render === 'function');
