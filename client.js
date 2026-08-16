@@ -9,21 +9,24 @@
 // What it does
 //   Registers a custom composer into the `conversation.composer` chain. While
 //   the model's `design_stack_survey` tool is waiting for answers, the pending
-//   question interaction carries questions marked `survey: 'tech-stack'`; this
-//   composer claims those (and only those — priority -1, and the selector
-//   verifies the marker, so ordinary ask_user_question flows keep using the
-//   built-in composer) and renders:
+//   question interaction carries questions whose ids start with `dss_stack_`
+//   (the wire protocol strips unknown fields, so the marker lives in the id
+//   prefix); this composer claims those (and only those — priority -1, and
+//   the selector verifies the prefix, so ordinary ask_user_question flows
+//   keep using the built-in composer) and renders:
 //     - all questions in one card;
-//     - exactly 3 options per question: stack name + the scenario it fits;
-//     - a hover tooltip on every option with the stack's detailed info
-//       (`option.details`, passed through the interaction payload);
+//     - exactly 3 options per question: stack name + the scenario it fits
+//       (first paragraph of `option.description`);
+//     - a hover tooltip on every option showing the full description
+//       (`scenario\n\ndetails`, both carried inside the allowed
+//       `option.description` field);
 //     - one submit button that answers every question at once.
 //   Submitting calls `wait.respond(...)` exactly like the built-in composer,
 //   which resolves the Host-side `ctx.userQuestions.ask()` promise and lets the
 //   model continue with the chosen stack in the same turn.
 // ============================================================================
 
-const SURVEY_MARKER = 'tech-stack';
+const SURVEY_ID_PREFIX = 'dss_stack_';
 const NS = 'dss';
 
 // ---------------------------------------------------------------------------
@@ -63,9 +66,16 @@ function selectSurvey(owner) {
   const questions = question.payload.questions;
   if (questions.length === 0) return null;
   for (const item of questions) {
-    if (!item || item.survey !== SURVEY_MARKER) return null;
+    if (!item || typeof item.id !== 'string' || item.id.indexOf(SURVEY_ID_PREFIX) !== 0) return null;
   }
   return question;
+}
+
+/** The one-line scenario is the first paragraph of the full description. */
+function scenarioOf(option) {
+  const text = String((option && option.description) || '');
+  const split = text.indexOf('\n\n');
+  return split === -1 ? text : text.slice(0, split);
 }
 
 // ---------------------------------------------------------------------------
@@ -143,7 +153,7 @@ function SurveyComposer(props) {
         React.createElement(
           'div',
           { className: 'dss-heading' },
-          React.createElement('div', { className: 'dss-eyebrow' }, questions[0].surveyTitle || t('title')),
+          React.createElement('div', { className: 'dss-eyebrow' }, t('title')),
           React.createElement('h2', { className: 'dss-title' }, t('subtitle')),
           React.createElement('div', { className: 'dss-hint' }, t('hint')),
         ),
@@ -184,6 +194,8 @@ function SurveyComposer(props) {
             { className: 'dss-options', role: 'radiogroup', 'aria-label': q.question },
             (q.options || []).map((opt, oi) => {
               const isSelected = selected[q.id] === opt.label;
+              const full = String((opt && opt.description) || '');
+              const scenario = scenarioOf(opt);
               return React.createElement(
                 'button',
                 {
@@ -205,12 +217,12 @@ function SurveyComposer(props) {
                   'span',
                   { className: 'dss-optcopy' },
                   React.createElement('span', { className: 'dss-optlabel' }, opt.label),
-                  opt.description
-                    ? React.createElement('span', { className: 'dss-optdesc' }, opt.description)
+                  scenario
+                    ? React.createElement('span', { className: 'dss-optdesc' }, scenario)
                     : null,
                 ),
-                opt.details
-                  ? React.createElement('span', { className: 'dss-tip', role: 'tooltip' }, opt.details)
+                full
+                  ? React.createElement('span', { className: 'dss-tip', role: 'tooltip' }, full)
                   : null,
               );
             }),
