@@ -74,25 +74,30 @@ check('default complexity=3 detail=2 -> 3 questions', dss.questionCount(3, 2) ==
 // --- buildSurvey structure ----------------------------------------------------
 const survey = dss.buildSurvey('一个给团队用的项目管理看板', 'web', 5, 1);
 check('survey has 5 questions for (5,1) web', survey.length === 5, `got ${survey.length}`);
-check('first question carries survey marker', survey[0].survey === 'tech-stack');
-check('first question carries surveyTitle', survey[0].surveyTitle === '项目技术选型');
+check('first question id carries the dss_stack_ marker prefix', survey[0].id === 'dss_stack_frontend');
 check('first question carries detail (project description)', typeof survey[0].detail === 'string' && survey[0].detail.length > 0);
 check('every question has exactly 3 options', survey.every((q) => Array.isArray(q.options) && q.options.length === 3));
 check(
-  'every option has label + description + details',
+  'every option has label + description (scenario + blank line + details)',
   survey.every((q) => q.options.every((o) => typeof o.label === 'string' && o.label.length > 0
-    && typeof o.description === 'string' && o.description.length > 0
-    && typeof o.details === 'string' && o.details.length > 0)),
+    && typeof o.description === 'string'
+    && o.description.indexOf('\n\n') > 0)),
 );
+check('option description carries the extended details after the separator', survey[0].options[0].description.split('\n\n')[1].length > 20);
 check('question ids are unique', new Set(survey.map((q) => q.id)).size === survey.length);
-check('ids are stable stack_<dim>', survey.every((q) => /^stack_[a-z]+$/.test(q.id)));
+check('ids all carry the dss_stack_ prefix', survey.every((q) => q.id.indexOf('dss_stack_') === 0));
+check('no unknown wire fields are emitted (id/question/header/detail/options only)', (() => {
+  const first = Object.keys(survey[0]).sort().join(',');
+  const rest = survey.slice(1).every((q) => Object.keys(q).sort().join(',') === 'header,id,options,question');
+  return first === 'detail,header,id,options,question' && rest;
+})());
 
 const small = dss.buildSurvey('todo cli', 'cli', 1, 3);
 check('cli + low complexity -> 2 questions', small.length === 2, `got ${small.length}`);
-check('cli survey covers backend first', small[0].id === 'stack_backend');
+check('cli survey covers backend first', small[0].id === 'dss_stack_backend');
 
 const unknown = dss.buildSurvey('whatever', 'nope', 3, 2);
-check('unknown type falls back to other routing', unknown.length === 3 && unknown[0].id === 'stack_frontend', `got ${unknown.map((q) => q.id).join(',')}`);
+check('unknown type falls back to other routing', unknown.length === 3 && unknown[0].id === 'dss_stack_frontend', `got ${unknown.map((q) => q.id).join(',')}`);
 
 // --- Apply: tool registration --------------------------------------------------
 plugin.apply(ctxStub);
