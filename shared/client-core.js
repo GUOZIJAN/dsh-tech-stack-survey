@@ -1,47 +1,4 @@
 // ============================================================================
-// dsh-tech-stack-survey — Client half (static / permanent install)
-// ----------------------------------------------------------------------------
-// GENERATED FILE — DO NOT EDIT.
-// Single source of truth: shared/client-core.js + the static glue below.
-// Regenerate with `npm run build`; tests/consistency.test.js fails on drift.
-//
-// Static browser bundle twin of the dynamic `client.js` body. Shipped
-// client packages are lazy-CJS bundles registered via
-// `window.__ModuleLoader__.load({ id, factory })`; the module table's `require`
-// answers `react` (a shell seed word), so the component uses plain
-// `React.createElement` exactly like the dynamic body. `styles.insert` is
-// replaced by the static style-tag convention (data-plugin / data-plugin-css
-// attributes, duplicate-guarded), and the plugin object is exported as
-// `{ inject, apply }` like @deepseek-ai/dsh-client-ui-user-questions.
-// Both twins inline the SAME shared/client-core.js.
-// ============================================================================
-
-window.__ModuleLoader__.load({
-  id: "dsh-tech-stack-survey",
-  factory: (require) => {
-    var module = { exports: {} };
-    var exports = module.exports;
-    Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
-    const React = require("react");
-
-    // Static style-tag bookkeeping (data-plugin / data-plugin-css attributes;
-    // duplicate-guarded so HMR reloads do not stack tags). The dynamic sandbox
-    // provides `styles` as a builtin instead.
-    const CSS_TAG_ID = "dsh-tech-stack-survey/styles";
-    const styles = {
-      insert(cssText) {
-        if (typeof document === "undefined") return () => {};
-        if (document.querySelector(`style[data-plugin-css=${JSON.stringify(CSS_TAG_ID)}]`) !== null) return () => {};
-        const tag = document.createElement("style");
-        tag.dataset.plugin = "dsh-tech-stack-survey";
-        tag.dataset.pluginCss = CSS_TAG_ID;
-        tag.textContent = cssText;
-        document.head.append(tag);
-        return () => { tag.remove(); };
-      },
-    };
-
-// ============================================================================
 // dsh-tech-stack-survey — shared Client core (single source of truth)
 // ----------------------------------------------------------------------------
 // This file is inlined by scripts/build.mjs into BOTH Client install modes:
@@ -405,10 +362,3 @@ function apply(ctx) {
     SurveyComposer,
   ));
 }
-
-
-    exports.inject = inject;
-    exports.apply = apply;
-    return module.exports;
-  },
-});

@@ -50,7 +50,8 @@
   "license": "MIT",
   "scripts": {
     "test": "node --test tests/",
-    "check": "node --check lib/index.js && node --check lib/client.js"
+    "build": "node scripts/build.mjs",
+    "check": "node --check shared/survey-core.js && node --check shared/client-core.js && node --check lib/index.js && node --check lib/client.js && node scripts/build.mjs --check"
   },
   "peerDependencies": {
     "react": "^18.2.0",
