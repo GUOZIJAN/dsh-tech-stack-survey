@@ -14,8 +14,10 @@
 //        prompt detail;
 //     2. picks the relevant technology dimensions from a built-in knowledge
 //        bank and builds one question per dimension with exactly 3 options
-//        (each option = one tech stack, with the scenario it fits in
-//        `description` and detailed info for the hover popup in `details`);
+//        (each option = one tech stack, with the scenario it fits and the
+//        detailed hover info both carried in `option.description` — the wire
+//        protocol strips unknown fields, so extended data must ride allowed
+//        fields only);
 //     3. calls `ctx.userQuestions.ask()` which blocks until the human answers
 //        every question in the browser UI;
 //     4. returns the chosen stacks so the model can proceed with the design.
@@ -24,9 +26,12 @@
 // structure makes adding more locales straightforward.
 // ============================================================================
 
-// Marker that lets the Client half claim these interactions in the
-// `conversation.composer` chain (the built-in composer ignores them).
-const SURVEY_MARKER = 'tech-stack';
+// Wire constraint (verified in dsh-host-apiproxy's askUserQuestionItemSchema):
+// zod strips unknown fields, so the client only ever receives id/question/
+// header/detail/options[{label,description}]/multiSelect/intent. The Client
+// half claims our interactions by the question `id` prefix, and the extended
+// stack info travels inside `option.description` as `scenario\n\ndetails`.
+const SURVEY_ID_PREFIX = 'dss_stack_';
 const clamp = (value, lo, hi) => Math.min(hi, Math.max(lo, value));
 
 // ---------------------------------------------------------------------------
@@ -309,7 +314,10 @@ function questionCount(complexity, promptDetail) {
 
 /**
  * Build the survey question batch for `userQuestions.ask()`.
- * @returns {Array<{id: string, header: string, question: string, survey: string, options: Array}>}
+ * Only fields allowed by the wire schema are used: the marker is the
+ * `dss_stack_` id prefix, and each option's full text (scenario line, blank
+ * line, then the detailed hover content) rides `option.description`.
+ * @returns {Array<{id: string, header: string, question: string, options: Array}>}
  */
 function buildSurvey(projectDescription, projectType, complexity, promptDetail) {
   const order = ORDER_BY_TYPE[projectType] || ORDER_BY_TYPE.other;
@@ -319,18 +327,15 @@ function buildSurvey(projectDescription, projectType, complexity, promptDetail) 
     .map((key) => BANK[key])
     .filter(Boolean)
     .map((dim) => ({
-      id: `stack_${dim.id}`,
+      id: `${SURVEY_ID_PREFIX}${dim.id}`,
       header: dim.header,
       question: dim.question,
-      survey: SURVEY_MARKER,
       options: dim.options.map((option) => ({
         label: option.label,
-        description: option.description,
-        details: option.details,
+        description: `${option.description}\n\n${option.details}`,
       })),
     }));
   if (questions.length > 0) {
-    questions[0].surveyTitle = '项目技术选型';
     const summary = String(projectDescription || '').trim();
     if (summary.length > 0) {
       questions[0].detail = summary.length > 240 ? `${summary.slice(0, 240)}…` : summary;
