@@ -108,27 +108,36 @@ Dimension routing (`ORDER_BY_TYPE`): `web/fullstack → frontend, backend, datab
 ```
 dsh-tech-stack-survey/
 ├── package.json         # dual-face package: dsh.client + exports["./client"]
+├── shared/
+│   ├── survey-core.js   # Host single source of truth (bank, routing, tool options)
+│   └── client-core.js   # Client single source of truth (composer, dicts, styles)
+├── scripts/
+│   └── build.mjs        # twin generator: rebuilds the 4 files below from shared/
 ├── lib/
-│   ├── index.js         # Host half — tool + knowledge bank (static ESM)
-│   ├── client.js        # Client half — survey card UI (__ModuleLoader__ bundle)
+│   ├── index.js         # Host half — GENERATED (static ESM twin)
+│   ├── client.js        # Client half — GENERATED (__ModuleLoader__ bundle twin)
 │   └── types/           # .d.ts type surfaces
-├── host.js              # code.host for the dynamic install (cordis_define)
-├── client.js            # code.client for the dynamic install
+├── host.js              # GENERATED — code.host for the dynamic install (cordis_define)
+├── client.js            # GENERATED — code.client for the dynamic install
 ├── tests/
 │   ├── host.test.cjs        # VM unit tests of the dynamic Host body
 │   ├── static-host.test.js  # tests of lib/index.js against real defineTool
-│   └── client.test.js       # VM structure tests of the client bundle
+│   ├── client.test.js       # VM structure tests of the client bundle
+│   └── consistency.test.js  # anti-drift: twins must match shared/ regeneration
 └── README.md / README.zh.md
 ```
+
+**Single source of truth.** The dynamic twins (`host.js`, `client.js`) and the static twins (`lib/index.js`, `lib/client.js`) are **generated** from `shared/survey-core.js` + `shared/client-core.js` by `scripts/build.mjs` — they are not hand-edited. Edit the shared sources, then run `npm run build`; `npm test` (via `tests/consistency.test.js`) and `npm run check` fail on any drift, so the two install modes cannot silently diverge.
 
 ## Test
 
 ```bash
 npm test        # node --test tests/
-npm run check   # syntax-check lib/index.js and lib/client.js
+npm run check   # syntax-check shared + generated files, then fail on any twin drift
+npm run build   # regenerate the four twins from shared/ (after editing a shared source)
 ```
 
-Covers: question-count bounds (2–5), dimension routing and fallback, exactly 3 options per question (`label` + `description` with "scenario + blank line + details"), the `dss_stack_` id-prefix marker, schema-allowed fields only, the tool definition (parameters/output schema/render), and the full `execute` flow (incl. `ask()` call, agent/signal passthrough, custom-answer passthrough).
+Covers: question-count bounds (2–5), dimension routing and fallback, exactly 3 options per question (`label` + `description` with "scenario + blank line + details"), the `dss_stack_` id-prefix marker, schema-allowed fields only, the tool definition (parameters/output schema/render), the full `execute` flow (incl. `ask()` call, agent/signal passthrough, custom-answer passthrough), and generated-twin consistency.
 
 ## License
 

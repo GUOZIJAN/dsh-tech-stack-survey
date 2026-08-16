@@ -1,26 +1,4 @@
 // ============================================================================
-// dsh-tech-stack-survey — Host half (static / permanent install)
-// ----------------------------------------------------------------------------
-// GENERATED FILE — DO NOT EDIT.
-// Single source of truth: shared/survey-core.js + the static glue below.
-// Regenerate with `npm run build`; tests/consistency.test.js fails on drift.
-//
-// Static Cordis plugin twin of the dynamic `host.js` body: imports the real
-// `defineTool` from @deepseek-ai/dsh-tools and registers through the injected
-// `ctx.tools` service — exactly the idiom of the shipped host tool packages
-// (e.g. @deepseek-ai/dsh-tool-ask-user). Both twins inline the SAME
-// shared/survey-core.js, so knowledge-bank edits apply to both install modes.
-//
-// Registered tool: `design_stack_survey`. The model calls it when the user
-// asks to design/build a project without a complete tech stack. The tool
-// builds 2-5 questions (exactly 3 options each) from a built-in knowledge
-// bank, asks them via `ctx.userQuestions.ask()` (blocks until the human
-// answers in the browser UI), then returns the chosen stacks.
-// ============================================================================
-
-import { defineTool } from "@deepseek-ai/dsh-tools";
-
-// ============================================================================
 // dsh-tech-stack-survey — shared Host core (single source of truth)
 // ----------------------------------------------------------------------------
 // This file is inlined by scripts/build.mjs into BOTH Host install modes:
@@ -447,18 +425,3 @@ function makeToolOptions(ctx) {
     },
   };
 }
-
-
-// ---------------------------------------------------------------------------
-// Plugin definition
-// ---------------------------------------------------------------------------
-const name = "dsh-tech-stack-survey";
-// `tools` for ctx.tools.register (the shipped host-tool idiom), plus the
-// `userQuestions` capability seam this tool blocks on.
-const inject = ["tools", "userQuestions"];
-
-function apply(ctx) {
-  ctx.tools.register(defineTool(makeToolOptions(ctx)));
-}
-
-export { apply, inject, name };

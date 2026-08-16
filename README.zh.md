@@ -108,27 +108,36 @@ Host: ask() promise resolve → 工具返回所选技术栈 → 模型继续设�
 ```
 dsh-tech-stack-survey/
 ├── package.json         # 双面安装包：dsh.client + exports["./client"]
+├── shared/
+│   ├── survey-core.js   # Host 单一数据源（知识库、路由、工具定义）
+│   └── client-core.js   # Client 单一数据源（composer、词典、样式）
+├── scripts/
+│   └── build.mjs        # 孪生生成器：从 shared/ 重建下面 4 个文件
 ├── lib/
-│   ├── index.js         # Host 半部 —— 工具 + 知识库（静态 ESM）
-│   ├── client.js        # Client 半部 —— 问卷卡片 UI（__ModuleLoader__ bundle）
+│   ├── index.js         # Host 半部 —— 生成产物（静态 ESM 孪生）
+│   ├── client.js        # Client 半部 —— 生成产物（__ModuleLoader__ bundle 孪生）
 │   └── types/           # .d.ts 类型面
-├── host.js              # 动态安装（cordis_define）用的 code.host
-├── client.js            # 动态安装用的 code.client
+├── host.js              # 生成产物 —— 动态安装（cordis_define）用的 code.host
+├── client.js            # 生成产物 —— 动态安装用的 code.client
 ├── tests/
 │   ├── host.test.cjs        # 动态 Host 代码体的 VM 单元测试
 │   ├── static-host.test.js  # lib/index.js 对真实 defineTool 的测试
-│   └── client.test.js       # 客户端 bundle 的 VM 结构测试
+│   ├── client.test.js       # 客户端 bundle 的 VM 结构测试
+│   └── consistency.test.js  # 防漂移：孪生文件必须与 shared/ 重新生成结果一致
 └── README.md / README.zh.md
 ```
+
+**单一数据源**：动态孪生（`host.js` / `client.js`）与静态孪生（`lib/index.js` / `lib/client.js`）均由 `scripts/build.mjs` 从 `shared/survey-core.js` + `shared/client-core.js` **生成，不要手改**。修改共享源后执行 `npm run build`；`npm test`（经 `tests/consistency.test.js`）与 `npm run check` 会在任何漂移时失败，两种安装模式不会再悄悄分叉。
 
 ## 测试
 
 ```bash
 npm test        # node --test tests/
-npm run check   # 语法检查 lib/index.js 与 lib/client.js
+npm run check   # 语法检查 shared + 生成文件，并在任何孪生漂移时失败
+npm run build   # 从 shared/ 重新生成四个孪生文件（修改共享源之后）
 ```
 
-覆盖：题量边界（2–5）、维度路由与回退、每题恰好 3 个选项（`label` + `description` 内含“场景 + 空行 + 详情”）、`dss_stack_` id 前缀标记、题目仅含 schema 允许的字段、工具定义（参数/输出 schema/render）、`execute` 全流程（含 `ask()` 调用、agent/signal 透传、custom 答案透传）。
+覆盖：题量边界（2–5）、维度路由与回退、每题恰好 3 个选项（`label` + `description` 内含“场景 + 空行 + 详情”）、`dss_stack_` id 前缀标记、题目仅含 schema 允许的字段、工具定义（参数/输出 schema/render）、`execute` 全流程（含 `ask()` 调用、agent/signal 透传、custom 答案透传），以及生成孪生的一致性。
 
 ## 许可
 

@@ -1,29 +1,37 @@
 // ============================================================================
-// dsh-tech-stack-survey — Host half
+// dsh-tech-stack-survey — Host half (dynamic install)
 // ----------------------------------------------------------------------------
-// A dynamic Cordis plugin for DeepSeek Harness (DSH).
+// GENERATED FILE — DO NOT EDIT.
+// Single source of truth: shared/survey-core.js + the dynamic glue below.
+// Regenerate with `npm run build`; tests/consistency.test.js fails on drift.
 //
 // This file is the exact body of `code.host` in `cordis_define`:
 //   cordis_define(plugin, name, purpose, { host: <this body>, client: <client.js body> })
 //
-// What it does
-//   Registers one dynamic model Tool, `design_stack_survey`. The model calls it
-//   when the user asks to design/build a project without specifying a complete
-//   tech stack. The tool:
-//     1. decides how many questions to ask (2-5) from project complexity and
-//        prompt detail;
-//     2. picks the relevant technology dimensions from a built-in knowledge
-//        bank and builds one question per dimension with exactly 3 options
-//        (each option = one tech stack, with the scenario it fits and the
-//        detailed hover info both carried in `option.description` — the wire
-//        protocol strips unknown fields, so extended data must ride allowed
-//        fields only);
-//     3. calls `ctx.userQuestions.ask()` which blocks until the human answers
-//        every question in the browser UI;
-//     4. returns the chosen stacks so the model can proceed with the design.
+// Registers one dynamic model Tool, `design_stack_survey`. The model calls it
+// when the user asks to design/build a project without specifying a complete
+// tech stack: the tool builds 2-5 questions (3 options each) from the shared
+// knowledge bank, asks them via `ctx.userQuestions.ask()` (blocking until the
+// human answers in the browser UI), then returns the chosen stacks. The
+// sandbox provides `harness.defineTool` / `harness.registerTool`.
+// ============================================================================
+
+// ============================================================================
+// dsh-tech-stack-survey — shared Host core (single source of truth)
+// ----------------------------------------------------------------------------
+// This file is inlined by scripts/build.mjs into BOTH Host install modes:
+//   - lib/index.js   (static ESM package: imports the real defineTool)
+//   - host.js        (dynamic body: sandbox provides harness.defineTool)
+// It must stay dependency-free: no imports, no sandbox-only globals. The glue
+// around it differs; everything below is identical in both twins.
 //
-// The knowledge bank is written in Chinese (stack names are universal); the
-// structure makes adding more locales straightforward.
+//   SURVEY_ID_PREFIX + clamp
+//   BANK            — knowledge bank: 8 dimensions x exactly 3 options
+//   ORDER_BY_TYPE   — dimension routing per project type
+//   questionCount   — adaptive 2..5 question count
+//   buildSurvey     — builds the wire-safe question batch
+//   makeToolOptions — the design_stack_survey tool definition (ctx closes over
+//                     the userQuestions seam)
 // ============================================================================
 
 // Wire constraint (verified in dsh-host-apiproxy's askUserQuestionItemSchema):
@@ -344,6 +352,99 @@ function buildSurvey(projectDescription, projectType, complexity, promptDetail) 
   return questions;
 }
 
+/**
+ * The `design_stack_survey` tool definition, shared verbatim by both install
+ * modes. The caller passes the plugin `ctx` so `execute` can block on the
+ * injected `userQuestions` seam.
+ */
+function makeToolOptions(ctx) {
+  return {
+    name: 'design_stack_survey',
+    description:
+      '当用户要求「设计 / 搭建 / 开发 / 实现一个项目」且没有给出完整的技术栈时调用。' +
+      '本工具会结合项目复杂度和提示词详细度自动生成 2-5 个技术选型问题（每题恰好 3 个技术栈选项，' +
+      '选项包含适用场景，悬停可查看每个技术栈的详细介绍），在界面中呈现给用户，' +
+      '等待用户提交全部答案后返回所选技术栈，供你继续完成设计。' +
+      '若用户已经明确指定了完整技术栈，则不要调用本工具。',
+    parameters: {
+      project_description: {
+        type: 'string',
+        required: true,
+        description: '用户想要设计的项目的描述（原样转述或精简概括，将展示在问卷开头）。',
+      },
+      project_type: {
+        type: 'string',
+        enum: ['web', 'fullstack', 'mobile', 'desktop', 'ai', 'cli', 'other'],
+        description: '项目类型，决定提问哪些技术维度。默认 other（由模型自行判断）。',
+      },
+      complexity: {
+        type: 'integer',
+        description: '项目复杂程度：1（很简单）到 5（非常复杂），默认 3。影响问题数量。',
+      },
+      prompt_detail: {
+        type: 'integer',
+        description: '用户提示词的详细程度：1（只有一句话）到 3（细节较多但缺技术栈），默认 2。影响问题数量。',
+      },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          answers: {
+            type: 'array',
+            required: true,
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                id: { type: 'string', required: true },
+                question: { type: 'string', required: true },
+                selected: { type: 'array', required: true, items: { type: 'string' } },
+                custom: { type: 'string' },
+              },
+            },
+          },
+        },
+      },
+      render: (args, value) => {
+        const lines = ['技术选型结果（用户已提交）：'];
+        for (const answer of value.answers || []) {
+          const label = Array.isArray(answer.selected) && answer.selected.length > 0
+            ? answer.selected.join('、')
+            : (answer.custom || '（未选择）');
+          lines.push(`- ${answer.question || answer.id} → ${label}`);
+        }
+        return [{ type: 'text', text: lines.join('\n') }];
+      },
+    },
+    async execute(args, exec) {
+      const questions = buildSurvey(
+        String(args.project_description || ''),
+        args.project_type || 'other',
+        clamp(Number(args.complexity) || 3, 1, 5),
+        clamp(Number(args.prompt_detail) || 2, 1, 3),
+      );
+      const result = await ctx.userQuestions.ask({
+        questions,
+        ...(exec && exec.agent ? { agent: exec.agent } : {}),
+        signal: exec && exec.signal,
+      });
+      const byId = {};
+      for (const question of questions) byId[question.id] = question;
+      return {
+        answers: result.answers.map((answer) => ({
+          id: answer.id,
+          question: (byId[answer.id] || {}).question || answer.id,
+          selected: Array.isArray(answer.selected) ? answer.selected.slice() : [],
+          ...(answer.custom !== undefined && answer.custom !== '' ? { custom: answer.custom } : {}),
+        })),
+      };
+    },
+  };
+}
+
+
 // Test hook (harmless in production): exposes internals when the sandbox
 // defines __DSH_TECH_STACK_TEST__. Kept BEFORE the return so it is reachable.
 if (typeof __DSH_TECH_STACK_TEST__ !== 'undefined') {
@@ -356,90 +457,7 @@ if (typeof __DSH_TECH_STACK_TEST__ !== 'undefined') {
 return {
   inject: ['userQuestions'],
   apply(ctx) {
-    const tool = harness.defineTool({
-      name: 'design_stack_survey',
-      description:
-        '当用户要求「设计 / 搭建 / 开发 / 实现一个项目」且没有给出完整的技术栈时调用。' +
-        '本工具会结合项目复杂度和提示词详细度自动生成 2-5 个技术选型问题（每题恰好 3 个技术栈选项，' +
-        '选项包含适用场景，悬停可查看每个技术栈的详细介绍），在界面中呈现给用户，' +
-        '等待用户提交全部答案后返回所选技术栈，供你继续完成设计。' +
-        '若用户已经明确指定了完整技术栈，则不要调用本工具。',
-      parameters: {
-        project_description: {
-          type: 'string',
-          required: true,
-          description: '用户想要设计的项目的描述（原样转述或精简概括，将展示在问卷开头）。',
-        },
-        project_type: {
-          type: 'string',
-          enum: ['web', 'fullstack', 'mobile', 'desktop', 'ai', 'cli', 'other'],
-          description: '项目类型，决定提问哪些技术维度。默认 other（由模型自行判断）。',
-        },
-        complexity: {
-          type: 'integer',
-          description: '项目复杂程度：1（很简单）到 5（非常复杂），默认 3。影响问题数量。',
-        },
-        prompt_detail: {
-          type: 'integer',
-          description: '用户提示词的详细程度：1（只有一句话）到 3（细节较多但缺技术栈），默认 2。影响问题数量。',
-        },
-      },
-      output: {
-        schema: {
-          type: 'object',
-          additionalProperties: false,
-          properties: {
-            answers: {
-              type: 'array',
-              required: true,
-              items: {
-                type: 'object',
-                additionalProperties: false,
-                properties: {
-                  id: { type: 'string', required: true },
-                  question: { type: 'string', required: true },
-                  selected: { type: 'array', required: true, items: { type: 'string' } },
-                  custom: { type: 'string' },
-                },
-              },
-            },
-          },
-        },
-        render: (args, value) => {
-          const lines = ['技术选型结果（用户已提交）：'];
-          for (const answer of value.answers || []) {
-            const label = Array.isArray(answer.selected) && answer.selected.length > 0
-              ? answer.selected.join('、')
-              : (answer.custom || '（未选择）');
-            lines.push(`- ${answer.question || answer.id} → ${label}`);
-          }
-          return [{ type: 'text', text: lines.join('\n') }];
-        },
-      },
-      async execute(args, exec) {
-        const questions = buildSurvey(
-          String(args.project_description || ''),
-          args.project_type || 'other',
-          clamp(Number(args.complexity) || 3, 1, 5),
-          clamp(Number(args.prompt_detail) || 2, 1, 3),
-        );
-        const result = await ctx.userQuestions.ask({
-          questions,
-          ...(exec && exec.agent ? { agent: exec.agent } : {}),
-          signal: exec && exec.signal,
-        });
-        const byId = {};
-        for (const question of questions) byId[question.id] = question;
-        return {
-          answers: result.answers.map((answer) => ({
-            id: answer.id,
-            question: (byId[answer.id] || {}).question || answer.id,
-            selected: Array.isArray(answer.selected) ? answer.selected.slice() : [],
-            ...(answer.custom !== undefined && answer.custom !== '' ? { custom: answer.custom } : {}),
-          })),
-        };
-      },
-    });
+    const tool = harness.defineTool(makeToolOptions(ctx));
     ctx.effect(() => harness.registerTool(ctx, tool), 'tech-stack-survey: register design_stack_survey tool');
   },
 };

@@ -1,30 +1,48 @@
 // ============================================================================
-// dsh-tech-stack-survey — Client half
+// dsh-tech-stack-survey — Client half (dynamic install)
 // ----------------------------------------------------------------------------
-// A dynamic Cordis plugin for DeepSeek Harness (DSH).
+// GENERATED FILE — DO NOT EDIT.
+// Single source of truth: shared/client-core.js + the dynamic glue below.
+// Regenerate with `npm run build`; tests/consistency.test.js fails on drift.
 //
 // This file is the exact body of `code.client` in `cordis_define`:
 //   cordis_define(plugin, name, purpose, { host: <host.js body>, client: <this body> })
 //
-// What it does
-//   Registers a custom composer into the `conversation.composer` chain. While
-//   the model's `design_stack_survey` tool is waiting for answers, the pending
-//   question interaction carries questions whose ids start with `dss_stack_`
-//   (the wire protocol strips unknown fields, so the marker lives in the id
-//   prefix); this composer claims those (and only those — priority -1, and
-//   the selector verifies the prefix, so ordinary ask_user_question flows
-//   keep using the built-in composer) and renders ONE QUESTION AT A TIME:
-//     - the current question with exactly 3 options: stack name + the
-//       scenario it fits (first paragraph of `option.description`);
-//     - a hover tooltip on every option showing the full description
-//       (`scenario\n\ndetails`, both carried inside the allowed
-//       `option.description` field);
-//     - selecting an option auto-advances to the next question (with a
-//       "previous" button to go back and change a choice);
-//     - after the LAST question is answered, "submit" delivers every answer.
-//   Submitting calls `wait.respond(...)` exactly like the built-in composer,
-//   which resolves the Host-side `ctx.userQuestions.ask()` promise and lets the
-//   model continue with the chosen stack in the same turn.
+// Registers a custom composer into the `conversation.composer` chain that
+// claims pending `dss_stack_` question batches (priority -1 + id-prefix
+// selector) and renders one question at a time with hover tooltips, back
+// navigation, and a single submit resolving the Host-side `ask()`. The
+// sandbox provides `React` and `styles` builtins for the shared core.
+// ============================================================================
+
+// ============================================================================
+// dsh-tech-stack-survey — shared Client core (single source of truth)
+// ----------------------------------------------------------------------------
+// This file is inlined by scripts/build.mjs into BOTH Client install modes:
+//   - lib/client.js  (static lazy-CJS bundle: __ModuleLoader__ + React require
+//                     + style-tag bookkeeping wrap this body)
+//   - client.js      (dynamic body: sandbox provides React and styles builtins)
+// It must stay wrapper-free: `React` and `styles` are free variables resolved
+// by the surrounding glue. Everything below is identical in both twins.
+//
+// Registers a custom composer into the `conversation.composer` chain. While
+// the model's `design_stack_survey` tool is waiting for answers, the pending
+// question interaction carries questions whose ids start with `dss_stack_`
+// (the wire protocol strips unknown fields, so the marker lives in the id
+// prefix); this composer claims those (and only those — priority -1, and
+// the selector verifies the prefix, so ordinary ask_user_question flows
+// keep using the built-in composer) and renders ONE QUESTION AT A TIME:
+//   - the current question with exactly 3 options: stack name + the
+//     scenario it fits (first paragraph of `option.description`);
+//   - a hover tooltip on every option showing the full description
+//     (`scenario\n\ndetails`, both carried inside the allowed
+//     `option.description` field);
+//   - selecting an option auto-advances to the next question (with a
+//     "previous" button to go back and change a choice);
+//   - after the LAST question is answered, "submit" delivers every answer.
+// Submitting calls `wait.respond(...)` exactly like the built-in composer,
+// which resolves the Host-side `ctx.userQuestions.ask()` promise and lets the
+// model continue with the chosen stack in the same turn.
 // ============================================================================
 
 const SURVEY_ID_PREFIX = 'dss_stack_';
@@ -344,21 +362,29 @@ const css = `
 `;
 
 // ---------------------------------------------------------------------------
+// Plugin surface shared by both install modes.
+// ---------------------------------------------------------------------------
+const inject = ['slots', 'locale'];
+
+function apply(ctx) {
+  ctx.effect(() => ctx.locale.register(NS, dicts), 'dss: dictionaries');
+  ctx.effect(() => styles.insert(css), 'dss: styles');
+  ctx.slots.inject('conversation.composer', () => ctx.slots.register(
+    {
+      name: 'conversation.composer',
+      priority: -1,
+      locale: NS,
+      select: selectSurvey,
+    },
+    SurveyComposer,
+  ));
+}
+
+
+// ---------------------------------------------------------------------------
 // Plugin definition
 // ---------------------------------------------------------------------------
 return {
-  inject: ['slots', 'locale'],
-  apply(ctx) {
-    ctx.effect(() => ctx.locale.register(NS, dicts), 'dss: dictionaries');
-    ctx.effect(() => styles.insert(css), 'dss: styles');
-    ctx.slots.inject('conversation.composer', () => ctx.slots.register(
-      {
-        name: 'conversation.composer',
-        priority: -1,
-        locale: NS,
-        select: selectSurvey,
-      },
-      SurveyComposer,
-    ));
-  },
+  inject,
+  apply,
 };
