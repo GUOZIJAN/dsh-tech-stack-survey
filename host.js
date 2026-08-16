@@ -368,17 +368,14 @@ return {
         project_type: {
           type: 'string',
           enum: ['web', 'fullstack', 'mobile', 'desktop', 'ai', 'cli', 'other'],
-          required: false,
           description: '项目类型，决定提问哪些技术维度。默认 other（由模型自行判断）。',
         },
         complexity: {
           type: 'integer',
-          required: false,
           description: '项目复杂程度：1（很简单）到 5（非常复杂），默认 3。影响问题数量。',
         },
         prompt_detail: {
           type: 'integer',
-          required: false,
           description: '用户提示词的详细程度：1（只有一句话）到 3（细节较多但缺技术栈），默认 2。影响问题数量。',
         },
       },
