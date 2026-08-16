@@ -141,7 +141,7 @@ check('tool has output.render()', registeredTool && typeof registeredTool.output
 
   // custom answer passthrough
   ctxStub.userQuestions.ask = async () => ({
-    answers: [{ id: 'stack_frontend', selected: [], custom: 'Angular' }],
+    answers: [{ id: 'dss_stack_frontend', selected: [], custom: 'Angular' }],
   });
   const custom = await registeredTool.execute({ project_description: 'x' }, exec);
   check('custom answer is passed through', custom.answers[0].custom === 'Angular' && custom.answers[0].selected.length === 0);
