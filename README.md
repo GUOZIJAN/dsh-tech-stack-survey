@@ -17,7 +17,7 @@ DSH（DeepSeek Harness）技术选型问卷插件 · Tech-Stack Survey Plugin fo
 - 🧠 **自适应题量**：题目数量 = `clamp(2..5, round((complexity + (5 − promptDetail)) / 2))`。项目越复杂、提示词越含糊，问题越多；反之越少。
 - 🗂️ **内置知识库**：8 个技术维度（前端、后端、数据库、部署、移动/桌面端、AI、状态管理、测试），每个维度恰好 3 个主流技术栈选项。
 - 🖱️ **悬停即详解**：每个选项下方显示“适用场景”一句话；鼠标悬停（或键盘聚焦）弹出该技术栈的详细介绍弹层。
-- ✅ **一次提交**：所有问题在同一张卡片内，全部作答后统一提交，提交后模型在同一轮内继续设计。
+- ✅ **逐题提问**：一次只显示一题，选择后自动进入下一题（可「上一题」回退修改），最后一题答完统一提交，提交后模型在同一轮内继续设计。
 - 🔌 **零侵入**：仅在 `conversation.composer` 链上以 `priority: -1` 认领本插件的问卷交互（通过题目 `id` 的 `dss_stack_` 前缀识别——传输层 zod schema 会剥离未知字段，因此标记必须放在 schema 允许的字段里），普通 `ask_user_question` 流程仍走内置 UI。
 
 ## 工作原理 · How it works
@@ -32,14 +32,14 @@ DSH（DeepSeek Harness）技术选型问卷插件 · Tech-Stack Survey Plugin fo
 Host 半部: 由知识库生成 2-5 道题 × 每题 3 个选项（label + description，其中 description = “场景一句话\n\n详细介绍”）
   │  调用 ctx.userQuestions.ask({ questions, agent, signal }) —— 阻塞等待
   ▼
-Client 半部: 认领交互 → 渲染问卷卡片（悬停弹层、单题单选、统一提交）
+Client 半部: 认领交互 → 逐题渲染问卷（悬停弹层、选择后自动下一题、可回退、最后一题提交）
   │  用户提交 → wait.respond({ ok: true, value: { sessionId, answer } })
   ▼
 Host: ask() promise resolve → 工具返回所选技术栈 → 模型继续设计
 ```
 
 - **Host 半部**（`host.js`）：注册动态工具 `design_stack_survey`；内含知识库 `BANK`、维度路由 `ORDER_BY_TYPE`、题量计算 `questionCount`、问卷构建 `buildSurvey`，并调用 `ctx.userQuestions.ask()`。
-- **Client 半部**（`client.js`）：注册 `conversation.composer` 链条目（`priority: -1` + `dss_stack_` id 前缀选择器），渲染 `SurveyComposer` 组件：悬停弹层（`.dss-tip`，内容来自 `option.description` 完整文本）、选项单选、`已选择 n / N` 进度、`提交并开始设计` 按钮；提交与取消均复用内置的 `wait.respond()` 载体协议。
+- **Client 半部**（`client.js`）：注册 `conversation.composer` 链条目（`priority: -1` + `dss_stack_` id 前缀选择器），渲染 `SurveyComposer` 组件：**逐题提问**（选择自动进入下一题、可回退）、悬停弹层（`.dss-tip`，内容来自 `option.description` 完整文本）、`问题 n / N` 进度、`提交并开始设计` 按钮；提交与取消均复用内置的 `wait.respond()` 载体协议。
 
 ## 安装与使用 · Installation & Usage
 
